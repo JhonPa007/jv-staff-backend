@@ -1,0 +1,83 @@
+[
+  {
+    "column_name": "id"
+  },
+  {
+    "column_name": "reserva_id"
+  },
+  {
+    "column_name": "cliente_receptor_id"
+  },
+  {
+    "column_name": "empleado_id"
+  },
+  {
+    "column_name": "sucursal_id"
+  },
+  {
+    "column_name": "fecha_venta"
+  },
+  {
+    "column_name": "monto_final_venta"
+  },
+  {
+    "column_name": "estado_pago"
+  },
+  {
+    "column_name": "tipo_comprobante"
+  },
+  {
+    "column_name": "serie_comprobante"
+  },
+  {
+    "column_name": "numero_comprobante"
+  },
+  {
+    "column_name": "fecha_actualizacion"
+  },
+  {
+    "column_name": "nota_venta_origen_id"
+  },
+  {
+    "column_name": "subtotal_servicios"
+  },
+  {
+    "column_name": "subtotal_productos"
+  },
+  {
+    "column_name": "cliente_facturacion_id"
+  },
+  {
+    "column_name": "descuento_monto"
+  },
+  {
+    "column_name": "monto_impuestos"
+  },
+  {
+    "column_name": "campana_id"
+  },
+  {
+    "column_name": "estado_sunat"
+  },
+  {
+    "column_name": "cdr_sunat_path"
+  },
+  {
+    "column_name": "xml_firmado_hash"
+  },
+  {
+    "column_name": "caja_sesion_id"
+  },
+  {
+    "column_name": "notas_venta"
+  },
+  {
+    "column_name": "caja_id"
+  },
+  {
+    "column_name": "estado"
+  },
+  {
+    "column_name": "pago_nomina_id"
+  }
+]

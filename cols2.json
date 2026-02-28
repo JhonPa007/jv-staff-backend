@@ -1,0 +1,65 @@
+[
+  {
+    "column_name": "id"
+  },
+  {
+    "column_name": "venta_id"
+  },
+  {
+    "column_name": "servicio_id"
+  },
+  {
+    "column_name": "producto_id"
+  },
+  {
+    "column_name": "cantidad"
+  },
+  {
+    "column_name": "precio_unitario_venta"
+  },
+  {
+    "column_name": "subtotal_item_neto"
+  },
+  {
+    "column_name": "valor_produccion"
+  },
+  {
+    "column_name": "es_trabajo_extra"
+  },
+  {
+    "column_name": "es_hora_extra"
+  },
+  {
+    "column_name": "subtotal_item_bruto"
+  },
+  {
+    "column_name": "descuento_item_monto"
+  },
+  {
+    "column_name": "descripcion_item_venta"
+  },
+  {
+    "column_name": "notas_item"
+  },
+  {
+    "column_name": "usado_como_beneficio"
+  },
+  {
+    "column_name": "es_extra"
+  },
+  {
+    "column_name": "pagado_al_empleado"
+  },
+  {
+    "column_name": "porcentaje_servicio_extra"
+  },
+  {
+    "column_name": "comision_servicio_extra"
+  },
+  {
+    "column_name": "entregado_al_colaborador"
+  },
+  {
+    "column_name": "loyalty_consumption_group_id"
+  }
+]
