@@ -1,0 +1,78 @@
+[
+  {
+    "column_name": "id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "sucursal_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "categoria_gasto_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "caja_sesion_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "fecha",
+    "data_type": "date"
+  },
+  {
+    "column_name": "descripcion",
+    "data_type": "text"
+  },
+  {
+    "column_name": "monto",
+    "data_type": "numeric"
+  },
+  {
+    "column_name": "metodo_pago",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "comprobante_tipo",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "comprobante_serie",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "comprobante_numero",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "registrado_por_colaborador_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "fecha_registro",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "column_name": "empleado_beneficiario_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "comprobante_ruc_emisor",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "comprobante_razon_social_emisor",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "deducido_en_planilla_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "usuario_id",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "tipo",
+    "data_type": "character varying"
+  }
+]

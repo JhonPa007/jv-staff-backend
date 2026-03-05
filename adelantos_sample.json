@@ -1,0 +1,37 @@
+[
+  {
+    "id": 6,
+    "monto": "45.50",
+    "deducido": null,
+    "emp_id": 1,
+    "fecha": "2026-01-09T05:00:00.000Z"
+  },
+  {
+    "id": 9,
+    "monto": "50.00",
+    "deducido": null,
+    "emp_id": 5,
+    "fecha": "2026-01-10T05:00:00.000Z"
+  },
+  {
+    "id": 10,
+    "monto": "53.00",
+    "deducido": null,
+    "emp_id": 2,
+    "fecha": "2026-01-10T05:00:00.000Z"
+  },
+  {
+    "id": 40,
+    "monto": "20.00",
+    "deducido": null,
+    "emp_id": 5,
+    "fecha": "2026-02-02T05:00:00.000Z"
+  },
+  {
+    "id": 50,
+    "monto": "20.00",
+    "deducido": null,
+    "emp_id": 1,
+    "fecha": "2026-02-05T05:00:00.000Z"
+  }
+]
