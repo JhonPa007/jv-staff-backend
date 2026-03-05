@@ -65,13 +65,122 @@ router.get('/', verifyToken, async (req, res) => {
     }
 });
 
-// Obtener Resumen de Billetera (Sueldo Neto = Comisiones Pendientes - Adelantos)
+// Función auxiliar para obtener días del mes
+const buildPayrollObject = (baseInfo, sueldoMinimoVital, comisionesResult, gastadoResult, bonosResult, penalidadesResult) => {
+    const { tipo_contrato, sueldo_base, configuracion_comision } = baseInfo;
+
+    // Simplificación para los días, asumiendo mes completo por defecto al no enviar fechas precisas desde la app
+    // Si la app empieza a enviar fecha_inicio y fecha_fin, se puede calcular la fracción real prorrateada a 30 días.
+    const fraccionSueldoBase = (tipo_contrato === 'FIJO' || tipo_contrato === 'MIXTO') ? Number(sueldo_base || 0) : 0;
+
+    // Comisiones por Producción
+    const ventaPagable = Number(comisionesResult.rows[0]?.venta_pagable || 0);
+    const detalleVentas = comisionesResult.rows; // Asignaremos el desglose
+
+    let comisionProduccion = 0;
+
+    if (tipo_contrato === 'MIXTO' && configuracion_comision) {
+        const meta = Number(configuracion_comision.meta || 0);
+        const porcentaje = Number(configuracion_comision.porcentaje || 0);
+        if (ventaPagable > meta) {
+            comisionProduccion = (ventaPagable - meta) * (porcentaje / 100);
+        }
+    } else if (tipo_contrato === 'ESCALA' && configuracion_comision && configuracion_comision.tramos) {
+        const tramos = configuracion_comision.tramos;
+        let porcentajeAplicable = 0;
+        // La escala evalúa el avance total (En Billetera es el total del periodo actual)
+        for (let i = 0; i < tramos.length; i++) {
+            if (ventaPagable >= tramos[i].min && (tramos[i].max === null || ventaPagable <= tramos[i].max)) {
+                porcentajeAplicable = Number(tramos[i].porcentaje || 0);
+                break;
+            }
+        }
+        comisionProduccion = ventaPagable * (porcentajeAplicable / 100);
+    }
+
+    const totalBonos = Number(bonosResult.rows[0]?.total_bonos || 0);
+    const totalPenalidades = Number(penalidadesResult.rows[0]?.total_penalidades || 0);
+    const totalAdelantos = Number(gastadoResult.rows[0]?.total_adelantos || 0);
+
+    const smv = Number(sueldoMinimoVital || 0);
+    let reintegroSmv = 0;
+
+    const ingresoBaseMasComision = fraccionSueldoBase + comisionProduccion;
+
+    if (ingresoBaseMasComision > 0 && ingresoBaseMasComision < smv) {
+        reintegroSmv = smv - ingresoBaseMasComision;
+    }
+
+    if (tipo_contrato === 'ESCALA' && fraccionSueldoBase === 0 && comisionProduccion === 0 && totalBonos === 0) {
+        reintegroSmv = 0; // Si no produjo y es solo comisión, normalmente no hay reintegro si no hay asistencia, pero seguimos la fórmula
+    }
+
+    const saldoNeto = ingresoBaseMasComision + totalBonos - totalPenalidades + reintegroSmv - totalAdelantos;
+
+    return {
+        saldoNeto: saldoNeto,
+        desglose: {
+            sueldoBaseProporcional: fraccionSueldoBase,
+            ventaPagableRealizada: ventaPagable,
+            comisionesCalculadas: comisionProduccion,
+            bonos: totalBonos,
+            penalidades: totalPenalidades,
+            reintegroSMV: reintegroSmv,
+            adelantos: totalAdelantos
+        },
+        // Mantenemos la estructura compatible requerida por el frontend antiguo por el momento
+        comisiones: comisionesResult.rows || [],
+        adelantos: [], // Si quisiéramos listar el detalle, haríamos otra query. Dejamos vacío o llenamos si el front lo usa.
+        totalComisiones: comisionProduccion,
+        totalAdelantos: totalAdelantos
+    };
+};
+
+// Obtener Resumen de Billetera (Sueldo Neto a Pagar real)
 router.get('/billetera', verifyToken, async (req, res) => {
     const empleadoId = req.user.id;
+    const { fecha_inicio, fecha_fin } = req.query; // Para soportar rangos si el frontend los envía
 
     try {
-        // 1. Obtener Comisiones Pendientes
+        // Obtenemos los datos base del empleado
+        const empQuery = `SELECT tipo_contrato, sueldo_base, configuracion_comision FROM empleados WHERE id = $1`;
+        const empResult = await db.query(empQuery, [empleadoId]);
+        if (empResult.rows.length === 0) return res.status(404).json({ error: 'Empleado no encontrado' });
+        const baseInfo = empResult.rows[0];
+
+        // Obtenemos el SMV
+        const sysQuery = `SELECT sueldo_minimo_vital FROM configuracion_sistema LIMIT 1`;
+        const sysResult = await db.query(sysQuery);
+        const smv = sysResult.rows[0]?.sueldo_minimo_vital || 0;
+
+        // Construimos filtro de fechas si se envía
+        let dateFilterVentas = '';
+        let dateFilterOtros = '';
+        let paramsVentas = [empleadoId];
+        let paramsOtros = [empleadoId];
+
+        if (fecha_inicio && fecha_fin) {
+            dateFilterVentas = ` AND DATE(v.fecha_venta) BETWEEN $2 AND $3`;
+            dateFilterOtros = ` AND DATE(fecha) BETWEEN $2 AND $3`; // asumiendo columna 'fecha'
+            paramsVentas.push(fecha_inicio, fecha_fin);
+            paramsOtros.push(fecha_inicio, fecha_fin);
+        }
+
+        // 1. Obtener la Suma Total de lo vendido ("La Producción") pendiente
         const comisionesQuery = `
+            SELECT 
+                COALESCE(SUM(vi.subtotal_item_neto), 0) as venta_pagable
+            FROM ventas v
+            JOIN venta_items vi ON v.id = vi.venta_id
+            WHERE v.empleado_id = $1 
+            AND v.estado != 'Anulada' 
+            AND v.pago_nomina_id IS NULL
+            ${dateFilterVentas}
+        `;
+        const comisionesResult = await db.query(comisionesQuery, paramsVentas);
+
+        // 1.b Obtener el detalle de comisiones para la lista de la UI (ingresos)
+        const detalleIngresosQuery = `
             SELECT 
                 c.id, c.monto_comision, c.fecha_generacion as fecha,
                 COALESCE(
@@ -92,31 +201,59 @@ router.get('/billetera', verifyToken, async (req, res) => {
             WHERE c.empleado_id = $1 AND c.estado = 'Pendiente'
             ORDER BY c.fecha_generacion DESC
         `;
-        const comisionesResult = await db.query(comisionesQuery, [empleadoId]);
-        const comisiones = comisionesResult.rows;
-        const totalComisiones = comisiones.reduce((sum, item) => sum + parseFloat(item.monto_comision || 0), 0);
+        const detalleIngresosResult = await db.query(detalleIngresosQuery, [empleadoId]);
 
-        // 2. Obtener Adelantos No Retenidos
+        // 2. Obtener Adelantos pendientes
         const adelantosQuery = `
+            SELECT COALESCE(SUM(monto), 0) as total_adelantos
+            FROM gastos 
+            WHERE empleado_beneficiario_id = $1 
+            AND pago_nomina_id IS NULL
+            ${dateFilterOtros}
+        `;
+        const adelantosResult = await db.query(adelantosQuery, paramsOtros);
+
+        // 2.b Obtener detalle de adelantos para la lista de la UI
+        const detalleAdelantosQuery = `
             SELECT id, monto, fecha, descripcion
             FROM gastos 
-            WHERE empleado_beneficiario_id = $1 AND deducido_en_planilla_id IS NULL
+            WHERE empleado_beneficiario_id = $1 AND pago_nomina_id IS NULL
             ORDER BY fecha DESC
         `;
-        const adelantosResult = await db.query(adelantosQuery, [empleadoId]);
-        const adelantos = adelantosResult.rows;
-        const totalAdelantos = adelantos.reduce((sum, item) => sum + parseFloat(item.monto || 0), 0);
+        const detalleAdelantosResult = await db.query(detalleAdelantosQuery, [empleadoId]);
 
-        // 3. Calcular Saldo Neto
-        const saldoNeto = totalComisiones - totalAdelantos;
+        // 3. Obtener Bonos pendientes
+        const bonosQuery = `
+            SELECT COALESCE(SUM(monto), 0) as total_bonos
+            FROM empleado_bonos 
+            WHERE empleado_id = $1 
+            AND (deducido_en_planilla_id IS NULL)
+        `; // Asumimos deducido_en_planilla_id IS NULL maneja los bonos no liquidados
+        const bonosResult = await db.query(bonosQuery, [empleadoId]);
 
-        res.json({
-            comisiones,
-            adelantos,
-            totalComisiones,
-            totalAdelantos,
-            saldoNeto
-        });
+        // 4. Obtener Penalidades pendientes
+        const penalidadesQuery = `
+            SELECT COALESCE(SUM(monto), 0) as total_penalidades
+            FROM empleado_penalidades 
+            WHERE empleado_id = $1 
+            AND (deducido_en_planilla_id IS NULL)
+        `;
+        const penalidadesResult = await db.query(penalidadesQuery, [empleadoId]);
+
+        const billeteraData = buildPayrollObject(
+            baseInfo,
+            smv,
+            comisionesResult,
+            adelantosResult,
+            bonosResult,
+            penalidadesResult
+        );
+
+        // Asignamos las listas detalladas para mantener la compatibilidad con el frontend
+        billeteraData.comisiones = detalleIngresosResult.rows;
+        billeteraData.adelantos = detalleAdelantosResult.rows;
+
+        res.json(billeteraData);
 
     } catch (error) {
         console.error("Error obteniendo billetera:", error);
