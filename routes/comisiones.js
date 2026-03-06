@@ -236,25 +236,36 @@ router.get('/billetera', verifyToken, async (req, res) => {
         `;
         const detalleIngresosResult = await db.query(detalleIngresosQuery, paramsOtros);
 
-        // 2. Obtener Adelantos pendientes
+        // 2. Obtener Adelantos CONFIRMADOS para restar del saldo
         const adelantosQuery = `
             SELECT COALESCE(SUM(monto), 0) as total_adelantos
             FROM gastos 
             WHERE empleado_beneficiario_id = $1 
             AND deducido_en_planilla_id IS NULL
+            AND estado_confirmacion = 'Confirmado'
             ${dateFilterOtros}
         `;
         const adelantosResult = await db.query(adelantosQuery, paramsOtros);
 
-        // 2.b Obtener detalle de adelantos para la lista de la UI
+        // 2.b Obtener detalle de adelantos para la lista de la UI (Todos los del mes)
         const detalleAdelantosQuery = `
-            SELECT id, monto, fecha, descripcion
+            SELECT id, monto, fecha, descripcion, estado_confirmacion
             FROM gastos 
             WHERE empleado_beneficiario_id = $1 AND deducido_en_planilla_id IS NULL
             ${dateFilterOtros}
             ORDER BY fecha DESC
         `;
         const detalleAdelantosResult = await db.query(detalleAdelantosQuery, paramsOtros);
+
+        // 2.c Obtener SOLAMENTE los adelantos pendientes globales (sin filtro de fecha) para las Alertas
+        const adelantosPendientesQuery = `
+            SELECT id, monto, fecha, descripcion, estado_confirmacion
+            FROM gastos
+            WHERE empleado_beneficiario_id = $1 AND deducido_en_planilla_id IS NULL
+            AND estado_confirmacion = 'Pendiente'
+            ORDER BY fecha DESC
+        `;
+        const adelantosPendientesResult = await db.query(adelantosPendientesQuery, [empleadoId]);
 
         // 3. Obtener Bonos pendientes
         const bonosQuery = `
@@ -289,6 +300,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
         // Asignamos las listas detalladas para mantener la compatibilidad con el frontend
         billeteraData.comisiones = detalleIngresosResult.rows;
         billeteraData.adelantos = detalleAdelantosResult.rows;
+        billeteraData.adelantosPendientes = adelantosPendientesResult.rows; // Nueva propiedad
 
         res.json(billeteraData);
 

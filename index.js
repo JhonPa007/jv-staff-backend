@@ -24,6 +24,7 @@ app.use('/api/comisiones', require('./routes/comisiones'));
 app.use('/api/produccion', require('./routes/produccion'));
 app.use('/api/clientes', require('./routes/clientes'));
 app.use('/api/ventas', require('./routes/ventas'));
+app.use('/api/adelantos', require('./routes/adelantos'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
