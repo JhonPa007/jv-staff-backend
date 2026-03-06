@@ -66,69 +66,64 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // Función auxiliar para obtener días del mes
-const buildPayrollObject = (baseInfo, sueldoMinimoVital, comisionesResult, gastadoResult, bonosResult, penalidadesResult, fraccionSueldoBase) => {
+const buildPayrollObject = (baseInfo, comisionesResult, gastadoResult, bonosResult, penalidadesResult, fraccionSueldoBase) => {
     const { tipo_contrato, configuracion_comision } = baseInfo;
 
-    // Comisiones por Producción
-    const ventaPagable = Number(comisionesResult.rows[0]?.venta_pagable || 0);
-    const detalleVentas = comisionesResult.rows; // Asignaremos el desglose
+    // Totales de Producción
+    const ventaServicios = Number(comisionesResult.rows[0]?.venta_servicios || 0);
+    const ventaProductos = Number(comisionesResult.rows[0]?.venta_productos || 0);
+
+    // Las comisiones de productos ya vienen calculadas individualmente en la tabla comisiones (detalleVentas)
+    // Pero para el resumen escalonado, el % solo aplica a servicios.
+    const comisionesProductosFijas = Number(comisionesResult.rows[0]?.comisiones_productos_fijas || 0);
 
     let comisionProduccion = 0;
 
     if (tipo_contrato === 'MIXTO' && configuracion_comision) {
         const meta = Number(configuracion_comision.meta || 0);
         const porcentaje = Number(configuracion_comision.porcentaje || 0);
-        if (ventaPagable > meta) {
-            comisionProduccion = (ventaPagable - meta) * (porcentaje / 100);
+        if (ventaServicios > meta) {
+            comisionProduccion = (ventaServicios - meta) * (porcentaje / 100);
         }
     } else if ((tipo_contrato === 'ESCALA' || tipo_contrato === 'ESCALONADA') && configuracion_comision && configuracion_comision.tramos) {
         const tramos = configuracion_comision.tramos;
         let porcentajeAplicable = 0;
-        // La escala evalúa el avance total (En Billetera es el total del periodo actual)
+        // La escala evalúa el avance total de SERVICIOS
         for (let i = 0; i < tramos.length; i++) {
-            if (ventaPagable >= tramos[i].min && (tramos[i].max === null || ventaPagable <= tramos[i].max)) {
-                // Compatibilidad con campo 'pct' o 'porcentaje'
+            if (ventaServicios >= tramos[i].min && (tramos[i].max === null || ventaServicios <= tramos[i].max)) {
                 porcentajeAplicable = Number(tramos[i].pct || tramos[i].porcentaje || 0);
                 break;
             }
         }
-        comisionProduccion = ventaPagable * (porcentajeAplicable / 100);
+        comisionProduccion = ventaServicios * (porcentajeAplicable / 100);
     }
+
+    // Sumamos las comisiones de productos (que son S/ 3, S/ 5, etc. fijos) al total de comisiones
+    const totalComisionesCalculadas = comisionProduccion + comisionesProductosFijas;
 
     const totalBonos = Number(bonosResult.rows[0]?.total_bonos || 0);
     const totalPenalidades = Number(penalidadesResult.rows[0]?.total_penalidades || 0);
     const totalAdelantos = Number(gastadoResult.rows[0]?.total_adelantos || 0);
 
-    const smv = Number(sueldoMinimoVital || 0);
-    let reintegroSmv = 0;
+    // Eliminamos lógica de SMV (Billetera Informativa)
+    const reintegroSmv = 0;
 
-    const ingresoBaseMasComision = fraccionSueldoBase + comisionProduccion;
-
-    if (ingresoBaseMasComision > 0 && ingresoBaseMasComision < smv) {
-        reintegroSmv = smv - ingresoBaseMasComision;
-    }
-
-    if (tipo_contrato === 'ESCALA' && fraccionSueldoBase === 0 && comisionProduccion === 0 && totalBonos === 0) {
-        reintegroSmv = 0; // Si no produjo y es solo comisión, normalmente no hay reintegro si no hay asistencia, pero seguimos la fórmula
-    }
-
-    const saldoNeto = ingresoBaseMasComision + totalBonos - totalPenalidades + reintegroSmv - totalAdelantos;
+    const saldoNeto = fraccionSueldoBase + totalComisionesCalculadas + totalBonos - totalPenalidades - totalAdelantos;
 
     return {
         saldoNeto: saldoNeto,
         desglose: {
             sueldoBaseProporcional: fraccionSueldoBase,
-            ventaPagableRealizada: ventaPagable,
-            comisionesCalculadas: comisionProduccion,
+            ventaServicios: ventaServicios,
+            ventaProductos: ventaProductos,
+            comisionesCalculadas: totalComisionesCalculadas,
             bonos: totalBonos,
             penalidades: totalPenalidades,
             reintegroSMV: reintegroSmv,
             adelantos: totalAdelantos
         },
-        // Mantenemos la estructura compatible requerida por el frontend antiguo por el momento
-        comisiones: comisionesResult.rows || [],
-        adelantos: [], // Si quisiéramos listar el detalle, haríamos otra query. Dejamos vacío o llenamos si el front lo usa.
-        totalComisiones: comisionProduccion,
+        comisiones: [], // Se llenará con el detalle si es necesario
+        totalComisiones: totalComisionesCalculadas,
         totalAdelantos: totalAdelantos
     };
 };
@@ -201,12 +196,15 @@ router.get('/billetera', verifyToken, async (req, res) => {
             }
         }
 
-        // 1. Obtener la Suma Total de lo vendido ("La Producción") pendiente
+        // 1. Obtener la Suma Total de lo vendido ("La Producción") separando servicios y productos
         const comisionesQuery = `
             SELECT 
-                COALESCE(SUM(vi.subtotal_item_neto), 0) as venta_pagable
+                COALESCE(SUM(CASE WHEN vi.servicio_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_servicios,
+                COALESCE(SUM(CASE WHEN vi.producto_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_productos,
+                COALESCE(SUM(c.monto_comision), 0) as comisiones_productos_fijas
             FROM ventas v
             JOIN venta_items vi ON v.id = vi.venta_id
+            LEFT JOIN comisiones c ON vi.id = c.venta_item_id AND vi.producto_id IS NOT NULL
             WHERE v.empleado_id = $1 
             AND v.estado != 'Anulada' 
             AND v.pago_nomina_id IS NULL
@@ -290,22 +288,15 @@ router.get('/billetera', verifyToken, async (req, res) => {
         `;
         const penalidadesResult = await db.query(penalidadesQuery, paramsOtros);
 
-        const billeteraData = buildPayrollObject(
-            baseInfo,
-            smv,
-            comisionesResult,
-            adelantosResult,
-            bonosResult,
-            penalidadesResult,
-            fraccionSueldoBase
-        );
+        // Enviamos el objeto final
+        const payroll = buildPayrollObject(baseInfo, comisionesResult, gastadoResult, bonosResult, penalidadesResult, fraccionSueldoBase);
 
-        // Asignamos las listas detalladas para mantener la compatibilidad con el frontend
-        billeteraData.comisiones = detalleIngresosResult.rows;
-        billeteraData.adelantos = detalleAdelantosResult.rows;
-        billeteraData.adelantosPendientes = adelantosPendientesResult.rows; // Nueva propiedad
+        // Agregar el detalle al objeto final para los tabs
+        payroll.comisiones = detalleIngresosResult.rows;
+        payroll.adelantos = detalleAdelantosResult.rows;
+        payroll.adelantosPendientes = adelantosPendientesResult.rows;
 
-        res.json(billeteraData);
+        res.json(payroll);
 
     } catch (error) {
         console.error("Error obteniendo billetera:", error);
