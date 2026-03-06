@@ -156,20 +156,29 @@ router.get('/billetera', verifyToken, async (req, res) => {
         let paramsVentas = [empleadoId];
         let paramsOtros = [empleadoId];
 
+        let dateFilterDetalleIngresos = '';
+
         if (fecha_inicio && fecha_fin) {
             dateFilterVentas = ` AND DATE(v.fecha_venta) BETWEEN $2 AND $3`;
             dateFilterOtros = ` AND DATE(fecha) BETWEEN $2 AND $3`; // asumiendo columna 'fecha'
+            dateFilterDetalleIngresos = ` AND DATE(c.fecha_generacion) BETWEEN $2 AND $3`;
             paramsVentas.push(fecha_inicio, fecha_fin);
             paramsOtros.push(fecha_inicio, fecha_fin);
 
             const hoy = new Date();
-            // Evitar problemas de timezone ajustando las horas
-            const inicio = new Date(fecha_inicio + 'T00:00:00');
-            const fin = new Date(fecha_fin + 'T23:59:59');
+
+            // Extraer de string YYYY-MM-DD
+            const [yearInicio, monthInicio, dayInicio] = fecha_inicio.split('-').map(Number);
+            const [yearFin, monthFin, dayFin] = fecha_fin.split('-').map(Number);
+
+            // Al crear date con new Date(year, monthIndex, day) usa local timezone
+            const inicio = new Date(yearInicio, monthInicio - 1, dayInicio, 0, 0, 0);
+            const fin = new Date(yearFin, monthFin - 1, dayFin, 23, 59, 59);
 
             // Lógica de prorrateo
             if (baseInfo.tipo_contrato === 'FIJO' || baseInfo.tipo_contrato === 'MIXTO') {
-                const diasMes = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 0).getDate();
+                // Obtener total de días del mes evaluado
+                const diasMes = new Date(yearInicio, monthInicio, 0).getDate();
 
                 if (hoy >= inicio && hoy <= fin) {
                     // Mes actual, prorrateado a los días transcurridos
@@ -222,9 +231,10 @@ router.get('/billetera', verifyToken, async (req, res) => {
             LEFT JOIN productos p ON vi.producto_id = p.id
             LEFT JOIN marcas m ON p.marca_id = m.id
             WHERE c.empleado_id = $1 AND c.estado = 'Pendiente'
+            ${dateFilterDetalleIngresos}
             ORDER BY c.fecha_generacion DESC
         `;
-        const detalleIngresosResult = await db.query(detalleIngresosQuery, [empleadoId]);
+        const detalleIngresosResult = await db.query(detalleIngresosQuery, paramsOtros);
 
         // 2. Obtener Adelantos pendientes
         const adelantosQuery = `
@@ -241,9 +251,10 @@ router.get('/billetera', verifyToken, async (req, res) => {
             SELECT id, monto, fecha, descripcion
             FROM gastos 
             WHERE empleado_beneficiario_id = $1 AND deducido_en_planilla_id IS NULL
+            ${dateFilterOtros}
             ORDER BY fecha DESC
         `;
-        const detalleAdelantosResult = await db.query(detalleAdelantosQuery, [empleadoId]);
+        const detalleAdelantosResult = await db.query(detalleAdelantosQuery, paramsOtros);
 
         // 3. Obtener Bonos pendientes
         const bonosQuery = `
