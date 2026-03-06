@@ -289,7 +289,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
         const penalidadesResult = await db.query(penalidadesQuery, paramsOtros);
 
         // Enviamos el objeto final
-        const payroll = buildPayrollObject(baseInfo, comisionesResult, gastadoResult, bonosResult, penalidadesResult, fraccionSueldoBase);
+        const payroll = buildPayrollObject(baseInfo, comisionesResult, adelantosResult, bonosResult, penalidadesResult, fraccionSueldoBase);
 
         // Agregar el detalle al objeto final para los tabs
         payroll.comisiones = detalleIngresosResult.rows;
