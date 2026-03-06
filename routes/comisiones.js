@@ -208,7 +208,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
             SELECT COALESCE(SUM(monto), 0) as total_adelantos
             FROM gastos 
             WHERE empleado_beneficiario_id = $1 
-            AND pago_nomina_id IS NULL
+            AND deducido_en_planilla_id IS NULL
             ${dateFilterOtros}
         `;
         const adelantosResult = await db.query(adelantosQuery, paramsOtros);
@@ -217,7 +217,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
         const detalleAdelantosQuery = `
             SELECT id, monto, fecha, descripcion
             FROM gastos 
-            WHERE empleado_beneficiario_id = $1 AND pago_nomina_id IS NULL
+            WHERE empleado_beneficiario_id = $1 AND deducido_en_planilla_id IS NULL
             ORDER BY fecha DESC
         `;
         const detalleAdelantosResult = await db.query(detalleAdelantosQuery, [empleadoId]);
@@ -227,8 +227,8 @@ router.get('/billetera', verifyToken, async (req, res) => {
             SELECT COALESCE(SUM(monto), 0) as total_bonos
             FROM empleado_bonos 
             WHERE empleado_id = $1 
-            AND (deducido_en_planilla_id IS NULL)
-        `; // Asumimos deducido_en_planilla_id IS NULL maneja los bonos no liquidados
+            AND deducido_en_planilla_id IS NULL
+        `;
         const bonosResult = await db.query(bonosQuery, [empleadoId]);
 
         // 4. Obtener Penalidades pendientes
@@ -236,7 +236,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
             SELECT COALESCE(SUM(monto), 0) as total_penalidades
             FROM empleado_penalidades 
             WHERE empleado_id = $1 
-            AND (deducido_en_planilla_id IS NULL)
+            AND deducido_en_planilla_id IS NULL
         `;
         const penalidadesResult = await db.query(penalidadesQuery, [empleadoId]);
 
