@@ -81,13 +81,14 @@ const buildPayrollObject = (baseInfo, sueldoMinimoVital, comisionesResult, gasta
         if (ventaPagable > meta) {
             comisionProduccion = (ventaPagable - meta) * (porcentaje / 100);
         }
-    } else if (tipo_contrato === 'ESCALA' && configuracion_comision && configuracion_comision.tramos) {
+    } else if ((tipo_contrato === 'ESCALA' || tipo_contrato === 'ESCALONADA') && configuracion_comision && configuracion_comision.tramos) {
         const tramos = configuracion_comision.tramos;
         let porcentajeAplicable = 0;
         // La escala evalúa el avance total (En Billetera es el total del periodo actual)
         for (let i = 0; i < tramos.length; i++) {
             if (ventaPagable >= tramos[i].min && (tramos[i].max === null || ventaPagable <= tramos[i].max)) {
-                porcentajeAplicable = Number(tramos[i].porcentaje || 0);
+                // Compatibilidad con campo 'pct' o 'porcentaje'
+                porcentajeAplicable = Number(tramos[i].pct || tramos[i].porcentaje || 0);
                 break;
             }
         }
