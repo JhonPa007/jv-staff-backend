@@ -153,6 +153,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
         let fraccionSueldoBase = 0;
         let dateFilterVentas = '';
         let dateFilterOtros = '';
+        let dateFilterBonosPenalidades = '';
         let paramsVentas = [empleadoId];
         let paramsOtros = [empleadoId];
 
@@ -160,7 +161,8 @@ router.get('/billetera', verifyToken, async (req, res) => {
 
         if (fecha_inicio && fecha_fin) {
             dateFilterVentas = ` AND DATE(v.fecha_venta) BETWEEN $2 AND $3`;
-            dateFilterOtros = ` AND DATE(fecha) BETWEEN $2 AND $3`; // asumiendo columna 'fecha'
+            dateFilterOtros = ` AND DATE(fecha) BETWEEN $2 AND $3`; // Para tabla 'gastos'
+            dateFilterBonosPenalidades = ` AND DATE(fecha_registro) BETWEEN $2 AND $3`; // Para bonos y penalidades
             dateFilterDetalleIngresos = ` AND DATE(c.fecha_generacion) BETWEEN $2 AND $3`;
             paramsVentas.push(fecha_inicio, fecha_fin);
             paramsOtros.push(fecha_inicio, fecha_fin);
@@ -273,7 +275,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
             FROM empleado_bonos 
             WHERE empleado_id = $1 
             AND deducido_en_planilla_id IS NULL
-            ${dateFilterOtros}
+            ${dateFilterBonosPenalidades}
         `;
         const bonosResult = await db.query(bonosQuery, paramsOtros);
 
@@ -283,7 +285,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
             FROM empleado_penalidades 
             WHERE empleado_id = $1 
             AND deducido_en_planilla_id IS NULL
-            ${dateFilterOtros}
+            ${dateFilterBonosPenalidades}
         `;
         const penalidadesResult = await db.query(penalidadesQuery, paramsOtros);
 
