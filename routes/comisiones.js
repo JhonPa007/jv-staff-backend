@@ -66,12 +66,8 @@ router.get('/', verifyToken, async (req, res) => {
 });
 
 // Función auxiliar para obtener días del mes
-const buildPayrollObject = (baseInfo, sueldoMinimoVital, comisionesResult, gastadoResult, bonosResult, penalidadesResult) => {
-    const { tipo_contrato, sueldo_base, configuracion_comision } = baseInfo;
-
-    // Simplificación para los días, asumiendo mes completo por defecto al no enviar fechas precisas desde la app
-    // Si la app empieza a enviar fecha_inicio y fecha_fin, se puede calcular la fracción real prorrateada a 30 días.
-    const fraccionSueldoBase = (tipo_contrato === 'FIJO' || tipo_contrato === 'MIXTO') ? Number(sueldo_base || 0) : 0;
+const buildPayrollObject = (baseInfo, sueldoMinimoVital, comisionesResult, gastadoResult, bonosResult, penalidadesResult, fraccionSueldoBase) => {
+    const { tipo_contrato, configuracion_comision } = baseInfo;
 
     // Comisiones por Producción
     const ventaPagable = Number(comisionesResult.rows[0]?.venta_pagable || 0);
@@ -154,6 +150,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
         const smv = sysResult.rows[0]?.sueldo_minimo_vital || 0;
 
         // Construimos filtro de fechas si se envía
+        let fraccionSueldoBase = 0;
         let dateFilterVentas = '';
         let dateFilterOtros = '';
         let paramsVentas = [empleadoId];
@@ -164,6 +161,32 @@ router.get('/billetera', verifyToken, async (req, res) => {
             dateFilterOtros = ` AND DATE(fecha) BETWEEN $2 AND $3`; // asumiendo columna 'fecha'
             paramsVentas.push(fecha_inicio, fecha_fin);
             paramsOtros.push(fecha_inicio, fecha_fin);
+
+            const hoy = new Date();
+            // Evitar problemas de timezone ajustando las horas
+            const inicio = new Date(fecha_inicio + 'T00:00:00');
+            const fin = new Date(fecha_fin + 'T23:59:59');
+
+            // Lógica de prorrateo
+            if (baseInfo.tipo_contrato === 'FIJO' || baseInfo.tipo_contrato === 'MIXTO') {
+                const diasMes = new Date(inicio.getFullYear(), inicio.getMonth() + 1, 0).getDate();
+
+                if (hoy >= inicio && hoy <= fin) {
+                    // Mes actual, prorrateado a los días transcurridos
+                    fraccionSueldoBase = (Number(baseInfo.sueldo_base || 0) / diasMes) * hoy.getDate();
+                } else if (hoy > fin) {
+                    // Mes pasado, asume que trabajó todo el mes
+                    fraccionSueldoBase = Number(baseInfo.sueldo_base || 0);
+                } else {
+                    // Mes futuro
+                    fraccionSueldoBase = 0;
+                }
+            }
+        } else {
+            // Comportamiento por defecto antiguo
+            if (baseInfo.tipo_contrato === 'FIJO' || baseInfo.tipo_contrato === 'MIXTO') {
+                fraccionSueldoBase = Number(baseInfo.sueldo_base || 0);
+            }
         }
 
         // 1. Obtener la Suma Total de lo vendido ("La Producción") pendiente
@@ -228,8 +251,9 @@ router.get('/billetera', verifyToken, async (req, res) => {
             FROM empleado_bonos 
             WHERE empleado_id = $1 
             AND deducido_en_planilla_id IS NULL
+            ${dateFilterOtros}
         `;
-        const bonosResult = await db.query(bonosQuery, [empleadoId]);
+        const bonosResult = await db.query(bonosQuery, paramsOtros);
 
         // 4. Obtener Penalidades pendientes
         const penalidadesQuery = `
@@ -237,8 +261,9 @@ router.get('/billetera', verifyToken, async (req, res) => {
             FROM empleado_penalidades 
             WHERE empleado_id = $1 
             AND deducido_en_planilla_id IS NULL
+            ${dateFilterOtros}
         `;
-        const penalidadesResult = await db.query(penalidadesQuery, [empleadoId]);
+        const penalidadesResult = await db.query(penalidadesQuery, paramsOtros);
 
         const billeteraData = buildPayrollObject(
             baseInfo,
@@ -246,7 +271,8 @@ router.get('/billetera', verifyToken, async (req, res) => {
             comisionesResult,
             adelantosResult,
             bonosResult,
-            penalidadesResult
+            penalidadesResult,
+            fraccionSueldoBase
         );
 
         // Asignamos las listas detalladas para mantener la compatibilidad con el frontend
