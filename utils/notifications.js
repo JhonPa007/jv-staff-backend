@@ -9,11 +9,18 @@ async function sendPushNotification(expoPushToken, title, body, data = {}) {
 
     const message = {
         to: expoPushToken,
-        sound: 'default',
+        sound: 'default', // Para iOS se sobreescribirá si hay canal con sonido o explícitamente
         title: title,
         body: body,
         data: data,
+        android: {
+            channelId: 'reservas',
+        },
+        _displayInForeground: true, // Opcional
     };
+
+    // Para iOS, el sonido debe ser el nombre del archivo
+    message.sound = 'notification.wav';
 
     try {
         const response = await fetch('https://exp.host/--/api/v2/push/send', {
