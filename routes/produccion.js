@@ -63,6 +63,7 @@ router.get('/', verifyToken, async (req, res) => {
         // Solo items que sean servicios (producto_id IS NULL)
         const detalleQuery = `
             SELECT 
+                v.id as venta_id,
                 v.fecha_venta as fecha,
                 COALESCE(c.razon_social_nombres || ' ' || COALESCE(c.apellidos, ''), 'Cliente General') as cliente,
                 s.nombre as servicio,
