@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const pool = new Pool({
     connectionString: process.env.DB_URL,
-    //   ssl: { rejectUnauthorized: false } // Habilita esto si Railway requiere SSL en el futuro
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 pool.connect()
