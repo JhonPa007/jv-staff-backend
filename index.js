@@ -14,7 +14,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Basic Route
 app.get('/', (req, res) => {
-    res.send('API Staff JV App is running');
+    res.send('JV Staff API - Production v2.0 - Active');
 });
 
 // Import Routes
