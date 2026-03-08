@@ -1,25 +1,24 @@
-const { Client } = require('pg');
-const client = new Client('postgresql://postgres:JbCjfwFkrmmbuQdkFpCWGvNEbmqCUldc@gondola.proxy.rlwy.net:17823/railway');
+const pool = require('./db');
 
-async function check() {
+async function checkFinal() {
     try {
-        await client.connect();
-        const tables = ['gastos', 'empleado_bonos', 'empleado_penalidades'];
-        for (const table of tables) {
-            const res = await client.query("SELECT * FROM " + table + " LIMIT 1");
-            console.log(`--- ${table} ---`);
-            if (res.rows[0]) {
-                console.log(Object.keys(res.rows[0]).join(', '));
-            } else {
-                const schema = await client.query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1", [table]);
-                console.log(schema.rows.map(r => r.column_name).join(', '));
-            }
-        }
+        console.log('--- Últimas 5 Reservas ---');
+        const res = await pool.query("SELECT id, empleado_id FROM reservas ORDER BY id DESC LIMIT 5");
+        res.rows.forEach(r => {
+            console.log(`Reserva [ID: ${r.id}] -> Empleado [ID: ${r.empleado_id}]`);
+        });
+
+        console.log('\n--- Estado de Renato (ID 5) y Jhon (ID 2) ---');
+        const emps = await pool.query("SELECT id, nombres, push_token FROM empleados WHERE id IN (1, 2, 5)");
+        emps.rows.forEach(e => {
+            console.log(`Empleado: ${e.nombres} [ID: ${e.id}] | Token: ${e.push_token ? e.push_token.substring(0, 20) + '...' : 'SIN TOKEN'}`);
+        });
+
     } catch (err) {
         console.error(err);
     } finally {
-        await client.end();
+        pool.end();
     }
 }
 
-check();
+checkFinal();

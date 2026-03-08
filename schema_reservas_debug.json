@@ -1,0 +1,72 @@
+[
+  {
+    "column_name": "id",
+    "is_nullable": "NO",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "cliente_id",
+    "is_nullable": "NO",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "empleado_id",
+    "is_nullable": "NO",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "servicio_id",
+    "is_nullable": "NO",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "sucursal_id",
+    "is_nullable": "NO",
+    "data_type": "integer"
+  },
+  {
+    "column_name": "fecha_hora_inicio",
+    "is_nullable": "NO",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "column_name": "fecha_hora_fin",
+    "is_nullable": "NO",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "column_name": "estado",
+    "is_nullable": "NO",
+    "data_type": "character varying"
+  },
+  {
+    "column_name": "notas_cliente",
+    "is_nullable": "YES",
+    "data_type": "text"
+  },
+  {
+    "column_name": "notas_internas",
+    "is_nullable": "YES",
+    "data_type": "text"
+  },
+  {
+    "column_name": "precio_cobrado",
+    "is_nullable": "YES",
+    "data_type": "numeric"
+  },
+  {
+    "column_name": "fecha_actualizacion",
+    "is_nullable": "YES",
+    "data_type": "timestamp without time zone"
+  },
+  {
+    "column_name": "evidencia_url",
+    "is_nullable": "YES",
+    "data_type": "text"
+  },
+  {
+    "column_name": "origen",
+    "is_nullable": "YES",
+    "data_type": "character varying"
+  }
+]
