@@ -30,46 +30,62 @@ app.use('/api/adelantos', require('./routes/adelantos'));
 
 // --- MONITOR DE BASE DE DATOS (NOTIFICACIONES) ---
 async function startNotificationListener() {
-    try {
-        const client = await db.connect();
-        await client.query('LISTEN new_reserva');
+    let client;
 
-        client.on('notification', async (msg) => {
-            if (msg.channel === 'new_reserva') {
-                const reserva = JSON.parse(msg.payload);
-                console.log('Nueva reserva detectada:', reserva.id);
-
-                // Obtener push_token del empleado asignado
-                try {
-                    const empRes = await db.query(
-                        'SELECT nombres, push_token FROM empleados WHERE id = $1',
-                        [reserva.empleado_id]
-                    );
-
-                    if (empRes.rows.length > 0) {
-                        const { nombres, push_token } = empRes.rows[0];
-                        if (push_token) {
-                            console.log(`Enviando notificación a ${nombres}...`);
-                            await sendPushNotification(
-                                push_token,
-                                'Nueva Cita Asignada 📅',
-                                `Hola ${nombres}, se te ha asignado una nueva reserva. Revisa tu agenda.`,
-                                { reservaId: reserva.id }
-                            );
-                        } else {
-                            console.log(`El empleado ${nombres} no tiene push_token registrado.`);
-                        }
-                    }
-                } catch (err) {
-                    console.error('Error al procesar notificación de reserva:', err);
-                }
+    async function connect() {
+        try {
+            if (client) {
+                client.release(true); // Liberar y forzar destrucción del cliente anterior si existe
             }
-        });
 
-        console.log('Escuchando notificaciones de base de datos (LISTEN new_reserva)...');
-    } catch (err) {
-        console.error('Error iniciando listener de notificaciones:', err);
+            client = await db.connect();
+
+            // Manejar errores en la conexión del listener
+            client.on('error', (err) => {
+                console.error('Error de base de datos en el Notification Listener:', err);
+                // Si la conexión se pierde, intentamos reconectar en 5 segundos
+                setTimeout(connect, 5000);
+            });
+
+            await client.query('LISTEN new_reserva');
+
+            client.on('notification', async (msg) => {
+                if (msg.channel === 'new_reserva') {
+                    try {
+                        const reserva = JSON.parse(msg.payload);
+                        console.log('Nueva reserva detectada:', reserva.id);
+
+                        const empRes = await db.query(
+                            'SELECT nombres, push_token FROM empleados WHERE id = $1',
+                            [reserva.empleado_id]
+                        );
+
+                        if (empRes.rows.length > 0) {
+                            const { nombres, push_token } = empRes.rows[0];
+                            if (push_token) {
+                                console.log(`Enviando notificación a ${nombres}...`);
+                                await sendPushNotification(
+                                    push_token,
+                                    'Nueva Cita Asignada 📅',
+                                    `Hola ${nombres}, se te ha asignado una nueva reserva. Revisa tu agenda.`,
+                                    { reservaId: reserva.id }
+                                );
+                            }
+                        }
+                    } catch (err) {
+                        console.error('Error al procesar notificación de reserva:', err);
+                    }
+                }
+            });
+
+            console.log('Escuchando notificaciones de base de datos (LISTEN new_reserva)...');
+        } catch (err) {
+            console.error('Error iniciando listener de notificaciones (reintentando en 5s):', err);
+            setTimeout(connect, 5000);
+        }
     }
+
+    await connect();
 }
 
 startNotificationListener();

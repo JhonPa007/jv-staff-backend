@@ -17,33 +17,36 @@ const verifyToken = (req, res, next) => {
 // Confirmar un adelanto
 router.put('/:id/confirmar', verifyToken, async (req, res) => {
     try {
-        // 1. Buscar la sucursal del adelanto
-        const gastoRes = await db.query('SELECT sucursal_id FROM gastos WHERE id = $1', [req.params.id]);
+        // 1. Buscar la sucursal y el caja_sesion_id actual del adelanto
+        const gastoRes = await db.query('SELECT sucursal_id, caja_sesion_id FROM gastos WHERE id = $1', [req.params.id]);
         if (gastoRes.rowCount === 0) {
             return res.status(404).json({ error: 'Adelanto no encontrado.' });
         }
-        const sucursalId = gastoRes.rows[0].sucursal_id;
+        const { sucursal_id: sucursalId, caja_sesion_id: sessionExistente } = gastoRes.rows[0];
 
-        // 2. Buscar sesión de caja abierta en esa sucursal
-        const sesionRes = await db.query(
-            "SELECT id FROM caja_sesiones WHERE sucursal_id = $1 AND estado = 'Abierta' ORDER BY id DESC LIMIT 1",
-            [sucursalId]
-        );
+        let cajaSesionId = sessionExistente;
 
-        if (sesionRes.rowCount === 0) {
-            return res.status(400).json({
-                error: 'No se puede confirmar el adelanto porque no hay una sesión de caja abierta en esta sucursal.'
-            });
+        // 2. Si no tiene sesión asignada, buscar la sesión de caja abierta actual en esa sucursal
+        if (!cajaSesionId) {
+            const sesionRes = await db.query(
+                "SELECT id FROM caja_sesiones WHERE sucursal_id = $1 AND estado = 'Abierta' ORDER BY id DESC LIMIT 1",
+                [sucursalId]
+            );
+
+            if (sesionRes.rowCount === 0) {
+                return res.status(400).json({
+                    error: 'Este adelanto no tiene una caja asignada y no hay ninguna sesión de caja abierta en esta sucursal para procesarlo.'
+                });
+            }
+            cajaSesionId = sesionRes.rows[0].id;
         }
 
-        const cajaSesionId = sesionRes.rows[0].id;
-
-        // 3. Actualizar el gasto con el nuevo estado y el caja_sesion_id
+        // 3. Actualizar el gasto con el nuevo estado y el caja_sesion_id (ya sea el existente o el nuevo)
         const result = await db.query(
             `UPDATE gastos 
              SET estado_confirmacion = 'Confirmado', caja_sesion_id = $1 
              WHERE id = $2 AND empleado_beneficiario_id = $3 AND estado_confirmacion = 'Pendiente'
-             RETURNING id`,
+             RETURNING id, caja_sesion_id`,
             [cajaSesionId, req.params.id, req.user.id]
         );
 
@@ -52,9 +55,9 @@ router.put('/:id/confirmar', verifyToken, async (req, res) => {
         }
 
         res.json({
-            message: 'Adelanto confirmado correctamente y cargado a la caja',
+            message: 'Adelanto confirmado correctamente',
             id: result.rows[0].id,
-            caja_sesion_id: cajaSesionId
+            caja_sesion_id: result.rows[0].caja_sesion_id
         });
     } catch (error) {
         console.error("Error al confirmar adelanto:", error);
