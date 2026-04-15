@@ -91,6 +91,53 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// NUEVO: Verificar Magic Link (Token temporal)
+router.get('/magic-link-verify/:token', async (req, res) => {
+    const { token } = req.params;
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (decoded.purpose !== 'magic-link') {
+            return res.status(400).json({ error: 'Token no es válido para este propósito' });
+        }
+
+        // Obtener datos frescos del usuario
+        const result = await db.query(
+            "SELECT id, nombres, apellidos, rol_id FROM empleados WHERE id = $1 AND activo = true",
+            [decoded.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Usuario no encontrado o inactivo' });
+        }
+
+        const user = result.rows[0];
+
+        // Generar un token de sesión normal (7 días)
+        const sessionToken = jwt.sign(
+            { id: user.id, rol_id: user.rol_id, nombre: user.nombres },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+        );
+
+        res.json({
+            message: 'Acceso concedido vía link',
+            token: sessionToken,
+            user: {
+                id: user.id,
+                nombres: user.nombres,
+                apellidos: user.apellidos,
+                rol_id: user.rol_id
+            }
+        });
+
+    } catch (err) {
+        console.error("Error verificando magic link:", err);
+        res.status(401).json({ error: 'El enlace ha expirado o es inválido' });
+    }
+});
+
 // Guardar Push Token del dispositivo
 router.post('/save-push-token', verifyToken, async (req, res) => {
     const { pushToken } = req.body;
