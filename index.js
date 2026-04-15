@@ -90,6 +90,24 @@ async function startNotificationListener() {
 
 startNotificationListener();
 
+// --- SERVIR VERSIÓN WEB DE LA APP ---
+// Los archivos de la app compilada para web irán en esta carpeta
+const webPath = path.join(__dirname, 'web-build');
+app.use(express.static(webPath));
+
+// Cualquier otra ruta que no sea de la API servirá el index.html de la App Web
+// Esto permite que el enrutamiento de la aplicación funcione correctamente
+app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+        res.sendFile(path.join(webPath, 'index.html'), (err) => {
+            if (err) {
+                // Si aún no se ha compilado la web, mostrar mensaje amigable
+                res.status(404).send('Servidor activo. Versión web aún no disponible (pendiente build).');
+            }
+        });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Servidor de API corriendo en el puerto ${PORT}`);
