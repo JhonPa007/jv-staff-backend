@@ -97,7 +97,8 @@ app.use(express.static(webPath));
 
 // Cualquier otra ruta que no sea de la API servirá el index.html de la App Web
 // Esto permite que el enrutamiento de la aplicación funcione correctamente
-app.get('*', (req, res) => {
+// Middleware para servir la versión web (fallback)
+app.use((req, res, next) => {
     if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
         res.sendFile(path.join(webPath, 'index.html'), (err) => {
             if (err) {
@@ -105,6 +106,8 @@ app.get('*', (req, res) => {
                 res.status(404).send('Servidor activo. Versión web aún no disponible (pendiente build).');
             }
         });
+    } else {
+        next();
     }
 });
 
