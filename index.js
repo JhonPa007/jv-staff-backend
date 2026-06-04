@@ -3,6 +3,7 @@ const cors = require('cors');
 require('dotenv').config();
 const db = require('./db');
 const path = require('path');
+const fs = require('fs');
 const { sendPushNotification } = require('./utils/notifications');
 
 const app = express();
@@ -12,9 +13,14 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Basic Route
+// Basic Route (servir la versión web si existe, si no, devolver el estado de la API)
 app.get('/', (req, res) => {
-    res.send('JV Staff API - Production v2.0 - Active');
+    const indexPath = path.join(__dirname, 'web-build', 'index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.send('JV Staff API - Production v2.0 - Active');
+    }
 });
 
 // Import Routes
