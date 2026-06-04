@@ -204,7 +204,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
                 COALESCE(SUM(c.monto_comision), 0) as comisiones_productos_fijas
             FROM ventas v
             JOIN venta_items vi ON v.id = vi.venta_id
-            LEFT JOIN comisiones c ON vi.id = c.venta_item_id AND vi.producto_id IS NOT NULL
+            LEFT JOIN comisiones c ON vi.id = c.venta_item_id AND vi.producto_id IS NOT NULL AND c.estado = 'Pendiente'
             WHERE v.empleado_id = $1 
             AND v.estado != 'Anulada' 
             AND v.pago_nomina_id IS NULL
