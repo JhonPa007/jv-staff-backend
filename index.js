@@ -99,6 +99,10 @@ startNotificationListener();
 // --- SERVIR VERSIÓN WEB DE LA APP ---
 // Los archivos de la app compilada para web irán en esta carpeta
 const webPath = path.join(__dirname, 'web-build');
+
+// Interceptar solicitudes de node_modules en assets y servirlas de clean_node_modules
+app.use('/assets/node_modules', express.static(path.join(webPath, 'assets', 'clean_node_modules')));
+
 app.use(express.static(webPath));
 
 // Cualquier otra ruta que no sea de la API servirá el index.html de la App Web
