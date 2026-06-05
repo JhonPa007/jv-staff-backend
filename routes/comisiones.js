@@ -24,12 +24,11 @@ router.get('/', verifyToken, async (req, res) => {
     try {
         let query = `
             SELECT 
-                c.id,
+                'prod_' || c.id as id,
                 c.monto_comision,
                 c.porcentaje,
                 c.estado,
                 c.fecha_generacion as fecha,
-                v.fecha_venta,
                 COALESCE(
                     CASE 
                         WHEN p.nombre IS NOT NULL AND m.nombre IS NOT NULL THEN m.nombre || ' ' || p.nombre
@@ -54,9 +53,35 @@ router.get('/', verifyToken, async (req, res) => {
             params.push(fecha_inicio, fecha_fin);
         }
 
-        query += ` ORDER BY c.fecha_generacion DESC LIMIT 50`;
+        query += `
+            UNION ALL
+            
+            SELECT 
+                'serv_' || vi.id as id,
+                vi.comision_servicio_extra as monto_comision,
+                vi.porcentaje_servicio_extra as porcentaje,
+                CASE WHEN vi.pagado_al_empleado = TRUE THEN 'Pagada' ELSE 'Pendiente' END as estado,
+                v.fecha_venta as fecha,
+                s.nombre || ' (H. Extra)' as servicio_nombre
+            FROM venta_items vi
+            JOIN ventas v ON vi.venta_id = v.id
+            JOIN servicios s ON vi.servicio_id = s.id
+            WHERE v.empleado_id = $1
+            AND vi.es_hora_extra = TRUE
+            AND v.estado != 'Anulada'
+        `;
 
-        const result = await db.query(query, params);
+        if (fecha_inicio && fecha_fin) {
+            query += ` AND v.fecha_venta BETWEEN $2 AND $3`;
+        }
+
+        let finalQuery = `
+            SELECT * FROM (${query}) AS combined
+            ORDER BY fecha DESC 
+            LIMIT 50
+        `;
+
+        const result = await db.query(finalQuery, params);
         res.json(result.rows);
 
     } catch (error) {
@@ -76,6 +101,7 @@ const buildPayrollObject = (baseInfo, comisionesResult, gastadoResult, bonosResu
     // Las comisiones de productos ya vienen calculadas individualmente en la tabla comisiones (detalleVentas)
     // Pero para el resumen escalonado, el % solo aplica a servicios.
     const comisionesProductosFijas = Number(comisionesResult.rows[0]?.comisiones_productos_fijas || 0);
+    const comisionesServiciosExtraPendientes = Number(comisionesResult.rows[0]?.comisiones_servicios_extra_pendientes || 0);
 
     let comisionProduccion = 0;
 
@@ -98,8 +124,8 @@ const buildPayrollObject = (baseInfo, comisionesResult, gastadoResult, bonosResu
         comisionProduccion = ventaServicios * (porcentajeAplicable / 100);
     }
 
-    // Sumamos las comisiones de productos (que son S/ 3, S/ 5, etc. fijos) al total de comisiones
-    const totalComisionesCalculadas = comisionProduccion + comisionesProductosFijas;
+    // Sumamos las comisiones de productos (que son S/ 3, S/ 5, etc. fijos) y las de servicios extra al total de comisiones
+    const totalComisionesCalculadas = comisionProduccion + comisionesProductosFijas + comisionesServiciosExtraPendientes;
 
     const totalBonos = Number(bonosResult.rows[0]?.total_bonos || 0);
     const totalPenalidades = Number(penalidadesResult.rows[0]?.total_penalidades || 0);
@@ -199,9 +225,10 @@ router.get('/billetera', verifyToken, async (req, res) => {
         // 1. Obtener la Suma Total de lo vendido ("La Producción") separando servicios y productos
         const comisionesQuery = `
             SELECT 
-                COALESCE(SUM(CASE WHEN vi.servicio_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_servicios,
+                COALESCE(SUM(CASE WHEN vi.servicio_id IS NOT NULL AND vi.es_hora_extra = FALSE THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_servicios,
                 COALESCE(SUM(CASE WHEN vi.producto_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_productos,
-                COALESCE(SUM(c.monto_comision), 0) as comisiones_productos_fijas
+                COALESCE(SUM(c.monto_comision), 0) as comisiones_productos_fijas,
+                COALESCE(SUM(CASE WHEN vi.es_hora_extra = TRUE AND vi.pagado_al_empleado = FALSE THEN vi.comision_servicio_extra ELSE 0 END), 0) as comisiones_servicios_extra_pendientes
             FROM ventas v
             JOIN venta_items vi ON v.id = vi.venta_id
             LEFT JOIN comisiones c ON vi.id = c.venta_item_id AND vi.producto_id IS NOT NULL AND c.estado = 'Pendiente'
@@ -213,9 +240,16 @@ router.get('/billetera', verifyToken, async (req, res) => {
         const comisionesResult = await db.query(comisionesQuery, paramsVentas);
 
         // 1.b Obtener el detalle de comisiones para la lista de la UI (ingresos)
+        let dateFilterServiciosExtra = '';
+        if (fecha_inicio && fecha_fin) {
+            dateFilterServiciosExtra = ` AND DATE(v.fecha_venta) BETWEEN $2 AND $3`;
+        }
+
         const detalleIngresosQuery = `
             SELECT 
-                c.id, c.monto_comision, c.fecha_generacion as fecha,
+                'prod_' || c.id as id, 
+                c.monto_comision, 
+                c.fecha_generacion as fecha,
                 COALESCE(
                     CASE 
                         WHEN p.nombre IS NOT NULL AND m.nombre IS NOT NULL THEN m.nombre || ' ' || p.nombre
@@ -233,7 +267,24 @@ router.get('/billetera', verifyToken, async (req, res) => {
             LEFT JOIN marcas m ON p.marca_id = m.id
             WHERE c.empleado_id = $1 AND c.estado = 'Pendiente'
             ${dateFilterDetalleIngresos}
-            ORDER BY c.fecha_generacion DESC
+            
+            UNION ALL
+            
+            SELECT 
+                'serv_' || vi.id as id,
+                vi.comision_servicio_extra as monto_comision,
+                v.fecha_venta as fecha,
+                s.nombre || ' (H. Extra)' as descripcion
+            FROM venta_items vi
+            JOIN ventas v ON vi.venta_id = v.id
+            JOIN servicios s ON vi.servicio_id = s.id
+            WHERE v.empleado_id = $1
+            AND vi.es_hora_extra = TRUE
+            AND vi.pagado_al_empleado = FALSE
+            AND v.estado != 'Anulada'
+            ${dateFilterServiciosExtra}
+            
+            ORDER BY fecha DESC
         `;
         const detalleIngresosResult = await db.query(detalleIngresosQuery, paramsOtros);
 
