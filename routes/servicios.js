@@ -19,10 +19,10 @@ const verifyToken = (req, res, next) => {
 router.get('/', verifyToken, async (req, res) => {
     try {
         const query = `
-            SELECT id, nombre, descripcion, precio, duracion_minutos
+            SELECT id, nombre, descripcion, precio, duracion_minutos, orden
             FROM servicios
             WHERE activo = true
-            ORDER BY nombre ASC
+            ORDER BY orden ASC NULLS LAST, nombre ASC
         `;
         const result = await db.query(query);
         res.json(result.rows);

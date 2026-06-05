@@ -45,4 +45,38 @@ router.get('/:id/historial', verifyToken, async (req, res) => {
     }
 });
 
+// Obtener notas de un cliente
+router.get('/:id/notas', verifyToken, async (req, res) => {
+    const clienteId = req.params.id;
+    try {
+        const result = await db.query("SELECT notas_adicionales FROM clientes WHERE id = $1", [clienteId]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Cliente no encontrado' });
+        }
+        res.json({ notas_adicionales: result.rows[0].notas_adicionales || '' });
+    } catch (error) {
+        console.error("Error obteniendo notas:", error);
+        res.status(500).json({ error: 'Error al obtener notas' });
+    }
+});
+
+// Guardar/actualizar notas de un cliente
+router.put('/:id/notas', verifyToken, async (req, res) => {
+    const clienteId = req.params.id;
+    const { notas_adicionales } = req.body;
+    try {
+        const result = await db.query(
+            "UPDATE clientes SET notas_adicionales = $1 WHERE id = $2 RETURNING notas_adicionales",
+            [notas_adicionales, clienteId]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Cliente no encontrado' });
+        }
+        res.json({ notas_adicionales: result.rows[0].notas_adicionales || '' });
+    } catch (error) {
+        console.error("Error actualizando notas:", error);
+        res.status(500).json({ error: 'Error al actualizar notas' });
+    }
+});
+
 module.exports = router;

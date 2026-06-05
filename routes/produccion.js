@@ -65,6 +65,7 @@ router.get('/', verifyToken, async (req, res) => {
             SELECT 
                 v.id as venta_id,
                 v.fecha_venta as fecha,
+                v.cliente_receptor_id as cliente_id,
                 COALESCE(c.razon_social_nombres || ' ' || COALESCE(c.apellidos, ''), 'Cliente General') as cliente,
                 s.nombre as servicio,
                 vi.subtotal_item_neto as valor,
