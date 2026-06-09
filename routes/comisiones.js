@@ -60,7 +60,7 @@ router.get('/', verifyToken, async (req, res) => {
                 'serv_' || vi.id as id,
                 vi.comision_servicio_extra as monto_comision,
                 vi.porcentaje_servicio_extra as porcentaje,
-                CASE WHEN vi.pagado_al_empleado = TRUE THEN 'Pagada' ELSE 'Pendiente' END as estado,
+                CASE WHEN vi.pagado_al_empleado = TRUE OR vi.entregado_al_colaborador = TRUE THEN 'Cancelada' ELSE 'Pendiente' END as estado,
                 v.fecha_venta as fecha,
                 s.nombre || ' (H. Extra)' as servicio_nombre
             FROM venta_items vi
@@ -228,7 +228,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
                 COALESCE(SUM(CASE WHEN vi.servicio_id IS NOT NULL AND vi.es_hora_extra = FALSE THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_servicios,
                 COALESCE(SUM(CASE WHEN vi.producto_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_productos,
                 COALESCE(SUM(c.monto_comision), 0) as comisiones_productos_fijas,
-                COALESCE(SUM(CASE WHEN vi.es_hora_extra = TRUE AND vi.pagado_al_empleado = FALSE THEN vi.comision_servicio_extra ELSE 0 END), 0) as comisiones_servicios_extra_pendientes
+                COALESCE(SUM(CASE WHEN vi.es_hora_extra = TRUE AND vi.pagado_al_empleado = FALSE AND vi.entregado_al_colaborador IS DISTINCT FROM TRUE THEN vi.comision_servicio_extra ELSE 0 END), 0) as comisiones_servicios_extra_pendientes
             FROM ventas v
             JOIN venta_items vi ON v.id = vi.venta_id
             LEFT JOIN comisiones c ON vi.id = c.venta_item_id AND vi.producto_id IS NOT NULL AND c.estado = 'Pendiente'
@@ -281,6 +281,7 @@ router.get('/billetera', verifyToken, async (req, res) => {
             WHERE v.empleado_id = $1
             AND vi.es_hora_extra = TRUE
             AND vi.pagado_al_empleado = FALSE
+            AND vi.entregado_al_colaborador IS DISTINCT FROM TRUE
             AND v.estado != 'Anulada'
             ${dateFilterServiciosExtra}
             

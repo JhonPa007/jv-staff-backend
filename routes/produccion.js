@@ -33,7 +33,7 @@ router.get('/', verifyToken, async (req, res) => {
         // Query Resumen Produccion + Productos
         const resumenQuery = `
             SELECT 
-                COALESCE(SUM(CASE WHEN vi.producto_id IS NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as prod_base,
+                COALESCE(SUM(CASE WHEN vi.producto_id IS NULL AND vi.es_extra IS DISTINCT FROM TRUE AND vi.es_hora_extra IS DISTINCT FROM TRUE THEN vi.subtotal_item_neto ELSE 0 END), 0) as prod_base,
                 COALESCE(SUM(CASE WHEN vi.producto_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_productos
             FROM venta_items vi
             JOIN ventas v ON vi.venta_id = v.id
