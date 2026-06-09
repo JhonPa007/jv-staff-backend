@@ -34,6 +34,7 @@ router.get('/', verifyToken, async (req, res) => {
         const resumenQuery = `
             SELECT 
                 COALESCE(SUM(CASE WHEN vi.producto_id IS NULL AND vi.es_extra IS DISTINCT FROM TRUE AND vi.es_hora_extra IS DISTINCT FROM TRUE THEN vi.subtotal_item_neto ELSE 0 END), 0) as prod_base,
+                COALESCE(SUM(CASE WHEN vi.producto_id IS NULL AND (vi.es_extra = TRUE OR vi.es_hora_extra = TRUE) THEN vi.subtotal_item_neto ELSE 0 END), 0) as prod_extra,
                 COALESCE(SUM(CASE WHEN vi.producto_id IS NOT NULL THEN vi.subtotal_item_neto ELSE 0 END), 0) as venta_productos
             FROM venta_items vi
             JOIN ventas v ON vi.venta_id = v.id
@@ -54,6 +55,7 @@ router.get('/', verifyToken, async (req, res) => {
 
         const resumen = {
             prod_base: Number(resumenResult.rows[0].prod_base),
+            prod_extra: Number(resumenResult.rows[0].prod_extra),
             venta_productos: Number(resumenResult.rows[0].venta_productos),
             fondo_fidelidad: 0, // Placeholder
             comisiones_generadas: Number(comisionesResult.rows[0].total_comisiones)
