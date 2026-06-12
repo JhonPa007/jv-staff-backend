@@ -49,13 +49,13 @@ router.get('/', verifyToken, async (req, res) => {
                 r.fecha_hora_fin, 
                 r.estado, 
                 r.notas_cliente,
-                COALESCE(c.razon_social_nombres || ' ' || COALESCE(c.apellidos, ''), c.razon_social_nombres) as cliente_nombre,
-                s.nombre as servicio_nombre,
+                COALESCE(c.razon_social_nombres || ' ' || COALESCE(c.apellidos, ''), c.razon_social_nombres, 'Cliente sin nombre') as cliente_nombre,
+                COALESCE(s.nombre, 'Servicio no especificado') as servicio_nombre,
                 suc.nombre as sucursal_nombre
             FROM reservas r
-            JOIN clientes c ON r.cliente_id = c.id
-            JOIN servicios s ON r.servicio_id = s.id
-            JOIN sucursales suc ON r.sucursal_id = suc.id
+            LEFT JOIN clientes c ON r.cliente_id = c.id
+            LEFT JOIN servicios s ON r.servicio_id = s.id
+            LEFT JOIN sucursales suc ON r.sucursal_id = suc.id
             WHERE r.empleado_id = $1 AND (r.estado != 'Completada' OR r.fecha_hora_inicio >= CURRENT_DATE)
             ORDER BY r.fecha_hora_inicio ASC
         `, [empleadoId]);
