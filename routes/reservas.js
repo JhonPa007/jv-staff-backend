@@ -56,7 +56,7 @@ router.get('/', verifyToken, async (req, res) => {
             JOIN clientes c ON r.cliente_id = c.id
             JOIN servicios s ON r.servicio_id = s.id
             JOIN sucursales suc ON r.sucursal_id = suc.id
-            WHERE r.empleado_id = $1 AND r.fecha_hora_inicio >= CURRENT_DATE
+            WHERE r.empleado_id = $1 AND (r.estado != 'Completada' OR r.fecha_hora_inicio >= CURRENT_DATE)
             ORDER BY r.fecha_hora_inicio ASC
         `, [empleadoId]);
 
